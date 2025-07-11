@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 function RequestForm({ onSendRequest }) {
-  const [method, setMethod] = useState('GET');
-  const [url, setUrl] = useState('');
+  const [method, setMethod] = useState("GET");
+  const [url, setUrl] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -11,17 +11,23 @@ function RequestForm({ onSendRequest }) {
 
   return (
     <form className="request-form" onSubmit={handleSubmit}>
-      <select 
-        value={method} 
+      <select
+        value={method}
         onChange={(e) => setMethod(e.target.value)}
         className="method-select"
       >
         <option value="GET">GET</option>
-        <option value="POST">POST</option>
-        <option value="PUT">PUT</option>
-        <option value="DELETE">DELETE</option>
+        <option value="POST" disabled>
+          POST
+        </option>
+        <option value="PUT" disabled>
+          PUT
+        </option>
+        <option value="DELETE" disabled>
+          DELETE
+        </option>
       </select>
-      
+
       <input
         type="text"
         value={url}
@@ -30,7 +36,7 @@ function RequestForm({ onSendRequest }) {
         className="url-input"
         autoFocus
       />
-      
+
       <button type="submit" className="send-button">
         Send
       </button>
