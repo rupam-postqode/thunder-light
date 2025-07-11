@@ -1,10 +1,12 @@
 import * as vscode from "vscode";
 import * as https from "https";
+import * as fs from "fs";
+import * as path from "path";
 
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Register Thunder  view
+  // Register Thunder Client view
   const treeDataProvider = new ThunderTreeDataProvider();
   vscode.window.registerTreeDataProvider(
     "thunder-light.view",
@@ -37,7 +39,7 @@ class ThunderTreeDataProvider
     } else {
       return Promise.resolve([
         new vscode.TreeItem(
-          "Open Thunder Light",
+          "Open Thunder Client",
           vscode.TreeItemCollapsibleState.None
         ),
       ]);
@@ -48,15 +50,18 @@ class ThunderTreeDataProvider
 function createPanel(context: vscode.ExtensionContext): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
     "thunderView",
-    "Thunder Light",
+    "Thunder Client",
     vscode.ViewColumn.One,
     {
       enableScripts: true,
       retainContextWhenHidden: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(context.extensionUri, "media", "webview"),
+      ],
     }
   );
 
-  panel.webview.html = getWebviewContent();
+  panel.webview.html = getWebviewContent(panel, context);
 
   // Handle panel disposal
   panel.onDidDispose(
@@ -68,6 +73,38 @@ function createPanel(context: vscode.ExtensionContext): vscode.WebviewPanel {
   );
 
   return panel;
+}
+
+function getWebviewContent(
+  panel: vscode.WebviewPanel,
+  context: vscode.ExtensionContext
+): string {
+  const webview = panel.webview;
+  const basePath = vscode.Uri.joinPath(
+    context.extensionUri,
+    "media",
+    "webview"
+  );
+  const indexPath = vscode.Uri.joinPath(basePath, "index.html").fsPath;
+
+  let html = fs.readFileSync(indexPath, "utf8");
+
+  // Update resource paths to use webview URIs
+  html = html.replace(
+    /(href|src)="([^"]*)"/g,
+    (_, tag, path) =>
+      `${tag}="${webview.asWebviewUri(vscode.Uri.joinPath(basePath, path))}"`
+  );
+
+  // Add CSP meta tag
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">`;
+  html = html.replace("</head>", `${csp}</head>`);
+
+  // Add vscode API initialization
+  const initScript = `<script>window.vscode = acquireVsCodeApi();</script>`;
+  html = html.replace("</body>", `${initScript}</body>`);
+
+  return html;
 }
 
 function setupMessageHandler(
@@ -86,7 +123,7 @@ function setupMessageHandler(
             });
           } catch (error) {
             panel.webview.postMessage({
-              command: "showResponse",
+              command: "showError",
               data: `Error: ${
                 error instanceof Error ? error.message : String(error)
               }`,
@@ -98,151 +135,6 @@ function setupMessageHandler(
     undefined,
     context.subscriptions
   );
-}
-
-function getWebviewContent(): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thunder Light</title>
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            padding: 15px;
-            background-color: var(--vscode-editor-background);
-            color: var(--vscode-editor-foreground);
-            margin: 0;
-        }
-        .request-form {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            align-items: center;
-        }
-        #method {
-            width: 100px;
-            padding: 8px;
-            background-color: var(--vscode-dropdown-background);
-            color: var(--vscode-dropdown-foreground);
-            border: 1px solid var(--vscode-dropdown-border);
-            border-radius: 3px;
-        }
-        #url {
-            flex: 1;
-            padding: 8px;
-            background-color: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 3px;
-        }
-        #send-btn {
-            padding: 8px 16px;
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        #send-btn:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-        .response-container {
-            border: 1px solid var(--vscode-editorWidget-border);
-            border-radius: 4px;
-            overflow: hidden;
-            height: calc(100vh - 150px);
-            display: flex;
-            flex-direction: column;
-        }
-        #response {
-            padding: 15px;
-            background-color: var(--vscode-editor-background);
-            color: var(--vscode-editor-foreground);
-            overflow: auto;
-            flex-grow: 1;
-            white-space: pre-wrap;
-            font-family: var(--vscode-editor-font-family);
-            font-size: var(--vscode-editor-font-size);
-        }
-        .status-bar {
-            padding: 5px 10px;
-            background-color: var(--vscode-statusBar-background);
-            color: var(--vscode-statusBar-foreground);
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Thunder Light</h1>
-    <div class="request-form">
-        <select id="method">
-            <option>GET</option>
-            <option>POST</option>
-            <option>PUT</option>
-            <option>DELETE</option>
-        </select>
-        <input type="text" id="url" placeholder="https://api.example.com/resource">
-        <button id="send-btn">Send</button>
-    </div>
-    <div class="response-container">
-        <div class="status-bar">Response</div>
-        <pre id="response">Response will appear here...</pre>
-    </div>
-
-    <script>
-        const vscode = acquireVsCodeApi();
-        const methodSelect = document.getElementById('method');
-        const urlInput = document.getElementById('url');
-        const sendButton = document.getElementById('send-btn');
-        const responsePre = document.getElementById('response');
-
-        sendButton.addEventListener('click', () => {
-            const method = methodSelect.value;
-            const url = urlInput.value;
-            
-            if (!url) {
-                responsePre.textContent = 'Please enter a URL';
-                return;
-            }
-
-            responsePre.textContent = 'Sending request...';
-            
-            vscode.postMessage({
-                command: 'sendRequest',
-                method: method,
-                url: url
-            });
-        });
-
-        // Handle Enter key in URL field
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendButton.click();
-            }
-        });
-
-        // Handle messages from extension
-        window.addEventListener('message', event => {
-            const message = event.data;
-            if (message.command === 'showResponse') {
-                try {
-                    // Try to format as JSON if possible
-                    const parsed = JSON.parse(message.data);
-                    responsePre.textContent = JSON.stringify(parsed, null, 2);
-                } catch {
-                    // If not JSON, display as plain text
-                    responsePre.textContent = message.data;
-                }
-            }
-        });
-        
-        // Focus URL field on load
-        urlInput.focus();
-    </script>
-</body>
-</html>`;
 }
 
 async function handleRequest(method: string, url: string): Promise<string> {
