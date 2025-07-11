@@ -14,30 +14,30 @@
   ],
   "main": "./src/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "thunderLight",
+          "title": "Thunder Light",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "thunderLight": [
+        {
+          "id": "thunder-light.view",
+          "name": "Thunder Client"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "thunder-light.openClient",
         "title": "Open Thunder Client",
         "category": "Thunder Light"
       }
-    ],
-    "viewsContainers": {
-      "activitybar": [
-        {
-          "id": "thunder-light",
-          "title": "Thunder Client",
-          "icon": "media/icon.svg"
-        }
-      ]
-    },
-    "views": {
-      "thunder-light": [
-        {
-          "id": "thunder-light.view",
-          "name": "Thunder Client"
-        }
-      ]
-    }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build-webview && npm run compile",
@@ -46,7 +46,10 @@
     "build-webview": "cd webview-ui && npm run build && cd .. && mkdir -p media/webview && cp -R webview-ui/build/* media/webview/",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "node ./out/test/runTest.js",
+    "build": "vsce package",
+    "install": "code --install-extension testext-0.0.1.vsix",
+    "dev": "npm run build && npm run install"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
