@@ -9,15 +9,41 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "icon": "icon.png",
+  "activationEvents": [
+    "onCommand:thunder-light.openLight",
+    "onView:thunder-light.view"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "thunder-light.helloWorld",
-        "title": "Hello World"
+        "command": "thunder-light.openLight",
+        "title": "Open Thunder Light",
+        "icon": "$(rocket)"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "thunder-light",
+          "title": "Thunder Light",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "thunder-light": [
+        {
+          "id": "thunder-light.view",
+          "name": "Thunder Light"
+        }
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -28,7 +54,10 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "build": "vsce package --out thunder-light.vsix",
+    "extinstall": "code --install-extension thunder-light.vsix",
+    "dev": "npm run build && npm run extinstall"
   },
   "devDependencies": {
     "@types/vscode": "^1.102.0",
