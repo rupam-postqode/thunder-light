@@ -1,33 +1,78 @@
 import React, { useState, useEffect } from "react";
 
 function ResponseView({ response, error }) {
-  const [formattedResponse, setFormattedResponse] = useState("");
+  const [statusLine, setStatusLine] = useState("");
+  const [headers, setHeaders] = useState({});
+  const [body, setBody] = useState("");
+  const [contentType, setContentType] = useState("");
 
   useEffect(() => {
     if (error) {
-      setFormattedResponse(`Error: ${error}`);
+      setStatusLine("Error");
+      setHeaders({});
+      setBody(error);
       return;
     }
 
     if (!response) {
-      setFormattedResponse("Response will appear here...");
+      setStatusLine("");
+      setHeaders({});
+      setBody("Response will appear here...");
       return;
     }
 
+    // Split response into status + headers + body
+    const [statusAndHeaders, ...bodyParts] = response.split("\n\n");
+    const [statusLineRaw, ...headerLines] = statusAndHeaders.split("\n");
+
+    const headerMap = {};
+    headerLines.forEach((line) => {
+      const [key, ...valueParts] = line.split(":");
+      if (key && valueParts.length) {
+        headerMap[key.trim()] = valueParts.join(":").trim();
+      }
+    });
+
+    const contentType = headerMap["content-type"] || "";
+    setContentType(contentType);
+    setStatusLine(statusLineRaw);
+    setHeaders(headerMap);
+
+    const bodyRaw = bodyParts.join("\n\n").trim();
+
     try {
-      // Try to parse as JSON
-      const parsed = JSON.parse(response);
-      setFormattedResponse(JSON.stringify(parsed, null, 2));
+      if (contentType.includes("application/json")) {
+        const json = JSON.parse(bodyRaw);
+        setBody(JSON.stringify(json, null, 2));
+      } else {
+        setBody(bodyRaw);
+      }
     } catch {
-      // If not JSON, use as-is
-      setFormattedResponse(response);
+      setBody(bodyRaw);
     }
   }, [response, error]);
 
   return (
     <div className="response-container">
-      <div className="status-bar">Response</div>
-      <pre className="response-content">{formattedResponse}</pre>
+      <div className="status-bar">
+        <strong>{statusLine}</strong>
+      </div>
+
+      {Object.keys(headers).length > 0 && (
+        <div className="headers-section">
+          <h4>Headers</h4>
+          <pre className="headers-content">
+            {Object.entries(headers)
+              .map(([key, value]) => `${key}: ${value}`)
+              .join("\n")}
+          </pre>
+        </div>
+      )}
+
+      <div className="body-section">
+        <h4>Body</h4>
+        <pre className="response-content">{body}</pre>
+      </div>
     </div>
   );
 }

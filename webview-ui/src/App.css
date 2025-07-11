@@ -132,3 +132,49 @@ html,
     width: 100%;
   }
 }
+.status-bar {
+  background-color: #333;
+  padding: 0.5rem 1rem;
+  font-weight: bold;
+  border-bottom: 1px solid #444;
+  color: #9cdcfe;
+  font-size: 0.9rem;
+}
+
+.headers-section,
+.body-section {
+  padding: 0.5rem 1rem;
+  border-top: 1px solid #444;
+}
+
+.headers-section h4,
+.body-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: #c586c0;
+}
+
+.headers-content,
+.response-content {
+  background-color: #1e1e1e;
+  border: 1px solid #333;
+  padding: 1rem;
+  overflow: auto;
+  max-height: 300px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: Consolas, monospace;
+  font-size: 0.85rem;
+  color: #dcdcaa;
+}
+
+.headers-content::-webkit-scrollbar,
+.response-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.headers-content::-webkit-scrollbar-thumb,
+.response-content::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
