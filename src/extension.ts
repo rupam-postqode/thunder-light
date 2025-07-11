@@ -1,28 +1,54 @@
 import * as vscode from "vscode";
 import * as https from "https";
+import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
+import { IncomingMessage, IncomingHttpHeaders } from "http";
 
 let currentPanel: vscode.WebviewPanel | undefined = undefined;
+let outputChannel: vscode.OutputChannel;
 
 export function activate(context: vscode.ExtensionContext) {
-  // Register Thunder Client view
-  const treeDataProvider = new ThunderTreeDataProvider();
-  vscode.window.registerTreeDataProvider(
-    "thunder-light.view",
-    treeDataProvider
-  );
+  console.log("Thunder Light extension activated!");
+  outputChannel = vscode.window.createOutputChannel("Thunder Light");
 
-  // Register command to open Thunder Client panel
-  context.subscriptions.push(
-    vscode.commands.registerCommand("thunder-light.openClient", () => {
+  const treeDataProvider = new ThunderTreeDataProvider();
+  vscode.window.createTreeView("thunder-light.view", { treeDataProvider });
+
+  const openClientCommand = vscode.commands.registerCommand(
+    "thunder-light.openClient",
+    () => {
       if (currentPanel) {
         currentPanel.reveal(vscode.ViewColumn.One);
       } else {
-        currentPanel = createPanel(context);
+        currentPanel = createWebviewPanel(context);
         setupMessageHandler(currentPanel, context);
       }
-    })
+    }
+  );
+
+  const openViewItemCommand = vscode.commands.registerCommand(
+    "thunder-light.openViewItem",
+    () => {
+      vscode.commands.executeCommand("thunder-light.openClient");
+    }
+  );
+
+  // Status bar button
+  const statusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+  );
+  statusBar.text = "$(rocket) Thunder";
+  statusBar.tooltip = "Open Thunder Client";
+  statusBar.command = "thunder-light.openClient";
+  statusBar.show();
+
+  context.subscriptions.push(
+    openClientCommand,
+    openViewItemCommand,
+    statusBar,
+    outputChannel
   );
 }
 
@@ -34,20 +60,19 @@ class ThunderTreeDataProvider
   }
 
   getChildren(element?: vscode.TreeItem): Thenable<vscode.TreeItem[]> {
-    if (element) {
-      return Promise.resolve([]);
-    } else {
-      return Promise.resolve([
-        new vscode.TreeItem(
-          "Open Thunder Client",
-          vscode.TreeItemCollapsibleState.None
-        ),
-      ]);
-    }
+    const openItem = new vscode.TreeItem("Open Thunder Client");
+    openItem.command = {
+      command: "thunder-light.openViewItem",
+      title: "Open Thunder Client",
+    };
+    openItem.iconPath = new vscode.ThemeIcon("rocket");
+    return Promise.resolve([openItem]);
   }
 }
 
-function createPanel(context: vscode.ExtensionContext): vscode.WebviewPanel {
+function createWebviewPanel(
+  context: vscode.ExtensionContext
+): vscode.WebviewPanel {
   const panel = vscode.window.createWebviewPanel(
     "thunderView",
     "Thunder Client",
@@ -63,7 +88,6 @@ function createPanel(context: vscode.ExtensionContext): vscode.WebviewPanel {
 
   panel.webview.html = getWebviewContent(panel, context);
 
-  // Handle panel disposal
   panel.onDidDispose(
     () => {
       currentPanel = undefined;
@@ -79,29 +103,33 @@ function getWebviewContent(
   panel: vscode.WebviewPanel,
   context: vscode.ExtensionContext
 ): string {
-  const webview = panel.webview;
-  const basePath = vscode.Uri.joinPath(
-    context.extensionUri,
-    "media",
-    "webview"
-  );
-  const indexPath = vscode.Uri.joinPath(basePath, "index.html").fsPath;
+  const basePath = path.join(context.extensionPath, "media", "webview");
+  const indexPath = path.join(basePath, "index.html");
+
+  if (!fs.existsSync(indexPath)) {
+    return `<html><body><h1>Error: UI not found</h1><p>Run: npm run build-webview</p></body></html>`;
+  }
 
   let html = fs.readFileSync(indexPath, "utf8");
 
-  // Update resource paths to use webview URIs
-  html = html.replace(
-    /(href|src)="([^"]*)"/g,
-    (_, tag, path) =>
-      `${tag}="${webview.asWebviewUri(vscode.Uri.joinPath(basePath, path))}"`
-  );
+  const webview = panel.webview;
+  const resourceRoot = webview
+    .asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "webview"))
+    .toString();
 
-  // Add CSP meta tag
+  html = html.replace(/(href|src)="([^"]*)"/g, (match, tag, resourcePath) => {
+    if (/^(http|data:|#)/.test(resourcePath)) return match;
+    const absPath = vscode.Uri.joinPath(
+      vscode.Uri.file(basePath),
+      resourcePath
+    );
+    return `${tag}="${webview.asWebviewUri(absPath)}"`;
+  });
+
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src ${webview.cspSource} 'unsafe-inline'; style-src ${webview.cspSource} 'unsafe-inline';">`;
-  html = html.replace("</head>", `${csp}</head>`);
-
-  // Add vscode API initialization
   const initScript = `<script>window.vscode = acquireVsCodeApi();</script>`;
+
+  html = html.replace("</head>", `${csp}</head>`);
   html = html.replace("</body>", `${initScript}</body>`);
 
   return html;
@@ -112,24 +140,29 @@ function setupMessageHandler(
   context: vscode.ExtensionContext
 ) {
   panel.webview.onDidReceiveMessage(
-    async (message) => {
-      switch (message.command) {
+    async (message: any) => {
+      const { command, id, method, url, headers, body } = message;
+
+      switch (command) {
         case "sendRequest":
           try {
-            const response = await handleRequest(message.method, message.url);
+            const response = await sendHttpRequest(method, url, headers, body);
             panel.webview.postMessage({
               command: "showResponse",
+              id,
               data: response,
             });
-          } catch (error) {
+          } catch (err) {
+            const errorMsg =
+              err instanceof Error ? err.stack || err.message : String(err);
             panel.webview.postMessage({
               command: "showError",
-              data: `Error: ${
-                error instanceof Error ? error.message : String(error)
-              }`,
+              id,
+              data: errorMsg,
             });
+            outputChannel.appendLine(`[ERROR] ${errorMsg}`);
           }
-          return;
+          break;
       }
     },
     undefined,
@@ -137,60 +170,66 @@ function setupMessageHandler(
   );
 }
 
-async function handleRequest(method: string, url: string): Promise<string> {
+async function sendHttpRequest(
+  method: string,
+  url: string,
+  headers: Record<string, string> = {},
+  body: string = ""
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    // Validate URL format
-    if (!url.startsWith("https://")) {
-      reject("Only HTTPS URLs are supported");
+    if (!/^https?:\/\//.test(url)) {
+      reject("Only HTTP(S) URLs are supported");
       return;
     }
 
-    const req = https.request(
+    const protocol = url.startsWith("https") ? https : http;
+    const req = protocol.request(
       url,
       {
-        method: method,
+        method,
         headers: {
           "User-Agent": "Thunder-Light/1.0",
           Accept: "application/json",
+          ...headers,
         },
       },
-      (res) => {
+      (res: IncomingMessage) => {
         let data = "";
 
-        res.on("data", (chunk) => {
-          data += chunk;
+        res.on("data", (chunk: Buffer) => {
+          data += chunk.toString();
         });
 
         res.on("end", () => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(
-              `HTTP Error ${res.statusCode}: ${res.statusMessage}\n${data}`
-            );
-          } else {
-            // Include status line in response
-            resolve(
-              `HTTP/${res.httpVersion} ${res.statusCode} ${
-                res.statusMessage
-              }\n${formatHeaders(res.headers)}\n\n${data}`
-            );
+          const responseStr = `HTTP/${res.httpVersion} ${res.statusCode} ${
+            res.statusMessage
           }
+${formatHeaders(res.headers)}
+
+${data}`;
+
+          outputChannel.appendLine(`[REQUEST] ${method} ${url}`);
+          outputChannel.appendLine(`[RESPONSE]\n${responseStr}`);
+          resolve(responseStr);
         });
       }
     );
 
-    req.on("error", (error) => {
-      reject(`Request failed: ${error.message}`);
+    req.on("error", (error: Error) => {
+      outputChannel.appendLine(`[ERROR] ${error.message}`);
+      reject(error);
     });
+
+    if (["POST", "PUT", "PATCH"].includes(method.toUpperCase()) && body) {
+      req.write(body);
+    }
 
     req.end();
   });
 }
 
-function formatHeaders(headers: Record<string, unknown>): string {
+function formatHeaders(headers: IncomingHttpHeaders): string {
   return Object.entries(headers)
-    .map(
-      ([key, value]) =>
-        `${key}: ${Array.isArray(value) ? value.join(", ") : value}`
-    )
+    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
     .join("\n");
 }

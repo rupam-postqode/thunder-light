@@ -1,33 +1,31 @@
 {
   "name": "thunder-light",
-  "displayName": "thunder-light",
-  "description": "",
+  "displayName": "Thunder Light",
+  "description": "Lightweight API Client for VS Code",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.102.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Other"
   ],
-  "icon": "icon.png",
   "activationEvents": [
-    "onCommand:thunder-light.openLight",
-    "onView:thunder-light.view"
+    "*"
   ],
-  "main": "./dist/extension.js",
+  "main": "./src/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "thunder-light.openLight",
-        "title": "Open Thunder Light",
-        "icon": "$(rocket)"
+        "command": "thunder-light.openClient",
+        "title": "Open Thunder Client",
+        "category": "Thunder Light"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "thunder-light",
-          "title": "Thunder Light",
+          "title": "Thunder Client",
           "icon": "media/icon.svg"
         }
       ]
@@ -36,41 +34,30 @@
       "thunder-light": [
         {
           "id": "thunder-light.view",
-          "name": "Thunder Light"
+          "name": "Thunder Client"
         }
       ]
     }
   },
-  "repository": {
-    "type": "git",
-    "url": ""
-  },
   "scripts": {
-    "vscode:prepublish": "npm run package",
-    "compile": "webpack",
-    "watch": "webpack --watch",
-    "package": "webpack --mode production --devtool hidden-source-map",
-    "compile-tests": "tsc -p . --outDir out",
-    "watch-tests": "tsc -p . -w --outDir out",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test",
-    "build": "vsce package --out thunder-light.vsix",
-    "extinstall": "code --install-extension thunder-light.vsix",
-    "dev": "npm run build && npm run extinstall"
+    "vscode:prepublish": "npm run build-webview && npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build-webview": "cd webview-ui && npm run build && cd .. && mkdir -p media/webview && cp -R webview-ui/build/* media/webview/",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.102.0",
-    "@types/mocha": "^10.0.10",
+    "@types/vscode": "^1.85.0",
     "@types/node": "20.x",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "typescript": "^5.8.3",
-    "ts-loader": "^9.5.2",
-    "webpack": "^5.99.7",
-    "webpack-cli": "^6.0.1",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    "@typescript-eslint/eslint-plugin": "^6.15.0",
+    "@typescript-eslint/parser": "^6.15.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.2",
+    "vscode-test": "^1.8.0"
+  },
+  "dependencies": {
+    "https": "^1.0.0"
   }
 }
